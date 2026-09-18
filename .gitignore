@@ -17,3 +17,8 @@ oculus_reader
 oculus_reader/oculus_reader
 **/__pycache__/
 .thumbs
+tmp/
+.marscode/
+src/realsense-ros/
+__pycache__/
+*.pyc

@@ -1,0 +1,108 @@
+tissue_detector:
+  ros__parameters:
+    color_topic: camera/camera/color/image_raw
+    depth_topic: camera/camera/aligned_depth_to_color/image_raw
+    camera_info_topic: camera/camera/color/camera_info
+    camera_frame: camera_color_optical_frame
+    target_frame: base_link
+    tissue_tf_parent_frame: base_link
+    tissue_frame_id: tissue_target
+    pose_topic: vision/tissue_pose
+    pose_camera_topic: vision/tissue_pose_camera
+    debug_image_topic: vision/tissue_debug/image
+    detected_image_topic: vision/tissue_detected/image
+    publish_tissue_tf: true
+    publish_debug_image: true
+    publish_detected_image: true
+    depth_scale: 0.001
+    min_depth_m: 0.12
+    max_depth_m: 0.85
+    # Default target is the blue tissue packet seen in the RealSense image.
+    # HSV values are OpenCV ranges: H 0-179, S/V 0-255.
+    hsv_h_min: 90
+    hsv_h_max: 115
+    hsv_s_min: 60
+    hsv_s_max: 255
+    hsv_v_min: 60
+    hsv_v_max: 255
+    min_area_px: 2500.0
+    max_area_fraction: 0.65
+    min_aspect_ratio: 0.55
+    max_aspect_ratio: 4.0
+    min_rectangularity: 0.55
+    min_valid_depth_ratio: 0.35
+    min_blue_fraction: 0.45
+    target_center_offset_px: [0.0, 0.0]
+    morphology_kernel_px: 7
+    tf_timeout_sec: 0.08
+
+tissue_pick:
+  ros__parameters:
+    target_pose_topic: vision/tissue_pose
+    tcp_pose_topic: feedback/tcp_pose
+    arm_status_topic: feedback/arm_status
+    move_p_topic: control/ik_pose
+    move_l_topic: control/move_l
+    gripper_topic: control/joint_states
+    pregrasp_pose_topic: vision/pregrasp_pose
+    grasp_pose_topic: vision/grasp_pose
+    lift_pose_topic: vision/lift_pose
+    plan_pose_array_topic: vision/grasp_plan
+    plan_marker_topic: vision/grasp_plan_markers
+    publish_plan_preview: true
+    plan_preview_period_sec: 0.2
+    dry_run: true
+    auto_pick: false
+    return_home_after_pick: false
+    home_tcp_pose:
+      [
+        0.17901399568224927,
+        0.012838163267257775,
+        0.1465926854184608,
+        -0.05364161383419479,
+        0.7804786122100572,
+        0.003642533921323063,
+        0.6228663139828307,
+      ]
+    keep_current_orientation: true
+    # The first reachable pick test reached pregrasp with the current TCP
+    # orientation. Keep that orientation and limit the grasp height first; switch
+    # to top_down_current_yaw only after confirming that pose is reachable.
+    orientation_mode: current
+    fixed_orientation_xyzw: [1.0, 0.0, 0.0, 0.0]
+    # Approach along the gripper/TCP forward direction. With the Piper TCP
+    # offset, TCP +Z is the gripper forward axis, so pregrasp is pulled back
+    # from the tissue and grasp moves straight forward.
+    approach_mode: tcp_axis
+    approach_axis_tcp: [0.0, 0.0, 1.0]
+    approach_axis_base: [0.0, 0.0, -1.0]
+    approach_distance_m: 0.10
+    # Measured on the real robot: with tool/tcp offset 0.13, the fingers closed
+    # ~1 cm short of the tissue along the approach axis (the 0.13 was to the
+    # fingertip, not the grip point between the fingers). This adds extra travel
+    # past the detected surface so the fingers straddle the packet.
+    # Tune: bigger = deeper grip; if the gripper pushes the packet, reduce.
+    grasp_depth_offset_m: 0.030
+    # Height guards. The detector reports the tissue TOP surface in base_link
+    # (~0.043 m in the recorded run), so the old 0.145/0.08 floors lifted both
+    # waypoints above the packet and the gripper closed in mid-air. These are now
+    # only table-clearance floors, not the grasp height.
+    min_pregrasp_z_m: 0.05
+    min_grasp_z_m: 0.01
+    lift_offset_base: [0.0, 0.0, 0.08]
+    # Grasp point relative to the detected top surface. Negative Z aims the TCP
+    # below the surface so the fingers straddle the packet instead of pinching
+    # its top edge. Tune: more negative = deeper grip, less negative = shallower.
+    object_to_grasp_offset_base: [0.0, 0.0, -0.015]
+    open_width_m: 0.085
+    close_width_m: 0.018
+    gripper_effort_n: 1.5
+    motion_timeout_sec: 8.0
+    settle_time_sec: 1.5
+    pose_tolerance_m: 0.025
+    require_recent_target_sec: 1.0
+    abort_on_motion_timeout: true
+    abort_on_arm_error: true
+    use_linear_approach: false
+    workspace_min: [-0.65, -0.45, 0.01]
+    workspace_max: [0.65, 0.45, 0.60]

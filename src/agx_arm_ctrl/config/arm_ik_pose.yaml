@@ -1,0 +1,42 @@
+arm_ik_pose_node:
+  ros__parameters:
+    robot_description_package: agx_arm_description
+    urdf_relative_path: agx_arm_urdf/piper/urdf/piper_description.urdf
+
+    locked_joints: [""]
+    ee_parent_joint: joint6
+    ee_frame_name: ik_tcp
+    tool_pre_rot_rpy: [0.0, 0.0, 0.0]
+    tool_translation_xyz: [0.0, 0.0, 0.13]
+
+    # Comma-separated flat collision pair indices, for example "3,0,3,1".
+    # Leave empty when enable_collision_check is false.
+    collision_pairs_flat_csv: ""
+    enable_collision_check: false
+
+    w_pos: 20.0
+    w_ori: 2.0
+    w_reg: 0.01
+    w_smooth: 0.2
+    ipopt_max_iter: 80
+    ipopt_tol: 0.0001
+
+    max_position_error_m: 0.03
+    max_orientation_error_rad: 0.6
+    # Per-joint delta between the IK solution and the current feedback angles.
+    # Commands arrive as absolute one-shot poses (tissue_pick -> control/ik_pose),
+    # so the first move toward a target is legitimately large: the recorded run
+    # required 0.8158 rad and was rejected by the old 0.8 limit, leaving the arm
+    # frozen. Joint limits (subject_to in ArmIK) and the optional collision check
+    # remain the real guards; w_smooth keeps the solver near the previous posture.
+    max_joint_step_rad: 3.2
+    require_feedback: true
+    dry_run: false
+    append_gripper_position: false
+
+    input_pose_topic: control/ik_pose
+    feedback_joint_topic: feedback/joint_states
+    gripper_feedback_topic: feedback/joint_states
+    output_joint_topic: control/move_j
+    fk_pose_topic: ik_fk_pose
+    output_joint_names: [joint1, joint2, joint3, joint4, joint5, joint6]

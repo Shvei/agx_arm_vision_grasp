@@ -151,6 +151,7 @@ def generate_launch_description():
             # services
             ('enable_agx_arm', 'enable_agx_arm'),
             ('control_enable', 'control_enable'),
+            ('clear_error', 'clear_error'),
             ('move_home', 'move_home'),
             ('emergency_stop', 'emergency_stop'),
             ('exit_teach_mode', 'exit_teach_mode'),

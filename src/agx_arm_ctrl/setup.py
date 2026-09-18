@@ -17,6 +17,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
+        (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -28,6 +29,7 @@ setup(
     entry_points={
         'console_scripts': [
             'agx_arm_ctrl_single = agx_arm_ctrl.agx_arm_ctrl_single_node:main',
+            'arm_ik_pose = agx_arm_ctrl.arm_ik_pose_node:main',
         ],
     },
 )

@@ -1,23 +1,25 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>agx_arm_ctrl</name>
+  <name>agx_arm_vision_grasp</name>
   <version>0.0.0</version>
-  <description>AgileX Robotic Arm ROS Package</description>
+  <description>Eye-in-hand RealSense tissue packet detection and grasping for AGX/Piper arms.</description>
   <maintainer email="root@todo.todo">root</maintainer>
   <license>Apache-2.0</license>
 
   <depend>rclpy</depend>
-  <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>geometry_msgs</depend>
-  <depend>std_srvs</depend>
-  <depend>builtin_interfaces</depend>
   <depend>agx_arm_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>image_transport</depend>
   <depend>launch</depend>
   <depend>launch_ros</depend>
-  <depend>ament_index_python</depend>
-  <exec_depend>python3-scipy</exec_depend>
+
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

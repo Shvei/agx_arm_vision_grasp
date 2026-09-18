@@ -13,10 +13,11 @@ from pyAgxArm import (
     PiperFW,
     resolve_firmware_profile,
 )
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from builtin_interfaces.msg import Time
-from std_srvs.srv import SetBool, Empty
+from std_srvs.srv import SetBool, Empty, Trigger
 from geometry_msgs.msg import Pose, PoseStamped, PoseArray
 from scipy.spatial.transform import Rotation as R
 
@@ -176,6 +177,7 @@ class AgxArmRosNode(Node):
         self.arm_joint_names = list()
         self.arm_joint_count = 0
         self._control_gate_block_logged = False
+        self._effector_command_lock = threading.Lock()
 
     def _log_parameters(self):
         self.get_logger().info(f"can_port: {self.can_port}")
@@ -382,6 +384,7 @@ class AgxArmRosNode(Node):
     def _setup_services(self):
         self.create_service(SetBool, "enable_agx_arm", self._enable_callback)
         self.create_service(SetBool, "control_enable", self._control_gate_callback)
+        self.create_service(Trigger, "clear_error", self._clear_error_callback)
         self.create_service(Empty, "move_home", self._move_home_callback)
         self.create_service(Empty, "emergency_stop", self._emergency_stop_callback)
         if not self.is_switch_seamlessly:
@@ -601,6 +604,10 @@ class AgxArmRosNode(Node):
 
         msg = PoseStamped()
         msg.header.stamp = self._float_to_ros_time(flange_pose.timestamp)
+        # The TCP pose is expressed in the arm base frame. Without an explicit
+        # frame_id the header is empty, which makes RViz drop the display with
+        # "the frame id of the message is empty" and breaks TF-based consumers.
+        msg.header.frame_id = "base_link"
         # msg.pose = pose1
         # self.flange_pose_pub.publish(msg)
         msg.pose = pose2
@@ -715,18 +722,21 @@ class AgxArmRosNode(Node):
                 self.agx_arm.move_j(joints)
                 self.is_mit_mode = False
 
-    def _control_gripper_joint(self, joint_pos, joint_effort):
+    def _control_gripper_joint_async(self, width: float, force: float):
+        worker = threading.Thread(
+            target=self._control_gripper_joint,
+            args=(width, force),
+            daemon=True,
+        )
+        worker.start()
+
+    def _control_gripper_joint(self, width: float, force: float):
         if self.gripper is None:
             return
 
-        if GRIPPER_JOINT_NAME not in joint_pos:
-            return
-
-        width = abs(joint_pos[GRIPPER_JOINT_NAME])
-        force = joint_effort.get(GRIPPER_JOINT_NAME, self.gripper_default_effort) or self.gripper_default_effort
-
         try:
-            self.gripper.move(width=width, force=force)
+            with self._effector_command_lock:
+                self.gripper.move(width=width, force=force)
         except ValueError as e:
             self.get_logger().warn(str(e))
 
@@ -768,7 +778,13 @@ class AgxArmRosNode(Node):
             for idx, name in enumerate(msg.name)
         }
         self._control_arm_joints(joint_pos)
-        self._control_gripper_joint(joint_pos, joint_effort)
+        if GRIPPER_JOINT_NAME in joint_pos:
+            width = abs(joint_pos[GRIPPER_JOINT_NAME])
+            force = (
+                joint_effort.get(GRIPPER_JOINT_NAME, self.gripper_default_effort)
+                or self.gripper_default_effort
+            )
+            self._control_gripper_joint_async(width, force)
         self._control_hand_joints(joint_pos)
 
     def _move_j_callback(self, msg: JointState):
@@ -787,7 +803,20 @@ class AgxArmRosNode(Node):
             return
 
         pose_cmd = self._create_pose_cmd(msg.pose)
-        self.agx_arm.move_p(pose_cmd)
+        self.get_logger().info(
+            "move_p tcp=[%.3f, %.3f, %.3f] flange=[%.3f, %.3f, %.3f]"
+            % (
+                msg.pose.position.x,
+                msg.pose.position.y,
+                msg.pose.position.z,
+                pose_cmd[0],
+                pose_cmd[1],
+                pose_cmd[2],
+            )
+        )
+        result = self.agx_arm.move_p(pose_cmd)
+        if result is False:
+            self.get_logger().warn("move_p returned False")
         self.is_mit_mode = False
 
     def _move_l_callback(self, msg: PoseStamped):
@@ -795,7 +824,20 @@ class AgxArmRosNode(Node):
             return
 
         pose_cmd = self._create_pose_cmd(msg.pose)
-        self.agx_arm.move_l(pose_cmd)
+        self.get_logger().info(
+            "move_l tcp=[%.3f, %.3f, %.3f] flange=[%.3f, %.3f, %.3f]"
+            % (
+                msg.pose.position.x,
+                msg.pose.position.y,
+                msg.pose.position.z,
+                pose_cmd[0],
+                pose_cmd[1],
+                pose_cmd[2],
+            )
+        )
+        result = self.agx_arm.move_l(pose_cmd)
+        if result is False:
+            self.get_logger().warn("move_l returned False")
         self.is_mit_mode = False
 
     def _move_c_callback(self, msg: PoseArray):
@@ -958,6 +1000,34 @@ class AgxArmRosNode(Node):
         self.get_logger().info(response.message)
         return response
 
+    def _clear_error_callback(self, request, response):
+        del request
+        try:
+            if not self._check_arm_ready():
+                response.success = False
+                response.message = "Agx_arm is not connected"
+                self.get_logger().warn("Agx_arm is not connected, cannot clear error")
+                return response
+
+            self.agx_arm.reset()
+            time.sleep(0.5)
+            self._enable_arm(True)
+
+            arm_status = self.agx_arm.get_arm_status()
+            if arm_status is not None:
+                status = int(arm_status.msg.arm_status)
+                response.success = status == 0
+                response.message = f"clear error command sent, arm_status={status}"
+            else:
+                response.success = True
+                response.message = "clear error command sent"
+            self.get_logger().info(response.message)
+        except Exception as e:
+            response.success = False
+            response.message = f"Failed to clear error: {e}"
+            self.get_logger().error(response.message)
+        return response
+
     def _emergency_stop_callback(self, request, response):
         """Emergency stop: use is_switch_seamlessly flag to decide MIT vs move_j."""
         try:
@@ -1015,7 +1085,9 @@ def main(args=None):
 
     try:
         node = AgxArmRosNode()
-        rclpy.spin(node)
+        executor = MultiThreadedExecutor(num_threads=4)
+        executor.add_node(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     except Exception as e:
